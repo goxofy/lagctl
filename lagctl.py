@@ -571,6 +571,7 @@ def build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument("--purge-logs", action="store_true", help="also delete stdout/stderr logs")
 
     subparsers.add_parser("doctor", help="check the local environment")
+    subparsers.add_parser("tui", help="open the interactive terminal dashboard")
 
     completion_parser = subparsers.add_parser("completion", help="print shell completion support")
     completion_parser.add_argument("shell", choices=("zsh", "bash", "jobs"))
@@ -645,6 +646,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"Removed {args.name}")
         elif args.subcommand == "doctor":
             return run_doctor(manager)
+        elif args.subcommand == "tui":
+            try:
+                from lagctl_tui import run_tui
+            except ImportError as exc:
+                raise LagctlError(
+                    "The TUI requires Textual; install it with "
+                    "python3 -m pip install 'textual>=0.70,<1.0'"
+                ) from exc
+            return run_tui(manager)
         elif args.subcommand == "completion":
             if args.shell == "jobs":
                 for name, _ in manager.iter_jobs():

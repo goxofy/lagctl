@@ -251,6 +251,10 @@ class UtilityTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 lagctl.parse_arguments([])
 
+    def test_parser_supports_tui_subcommand_without_optional_import(self):
+        args = lagctl.parse_arguments(["tui"])
+        self.assertEqual(args.subcommand, "tui")
+
     def test_add_options_can_follow_name(self):
         args = lagctl.parse_arguments(
             ["add", "worker", "--no-start", "--env", "PORT=3000", "--", "/bin/echo", "--verbose"]

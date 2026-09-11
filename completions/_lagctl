@@ -27,7 +27,8 @@ _lagctl() {
     'logs:show or follow job logs'
     'remove:stop and remove a job'
     'rm:stop and remove a job'
-    'doctor:check the local environment'
+     'doctor:check the local environment'
+     'tui:open the interactive terminal dashboard'
     'completion:print shell completion support'
   )
   global_options=(

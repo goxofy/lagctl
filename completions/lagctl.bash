@@ -4,7 +4,7 @@ _lagctl_completion() {
     previous="${COMP_WORDS[COMP_CWORD-1]}"
     subcommand="${COMP_WORDS[1]}"
 
-    local commands="add list ls status show start stop restart run logs remove rm doctor completion"
+    local commands="add list ls status show start stop restart run logs remove rm doctor tui completion"
     if (( COMP_CWORD == 1 )); then
         COMPREPLY=( $(compgen -W "$commands --help --version" -- "$current") )
         return

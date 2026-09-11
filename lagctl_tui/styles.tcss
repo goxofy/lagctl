@@ -1,0 +1,95 @@
+Screen {
+    layout: vertical;
+}
+
+#dashboard {
+    height: 1fr;
+}
+
+#jobs-pane {
+    width: 32%;
+    min-width: 24;
+    border: round $accent;
+    padding: 1;
+}
+
+#details-pane {
+    width: 68%;
+    border: round $accent;
+    padding: 2 3;
+}
+
+#jobs-title {
+    text-style: bold;
+    padding-bottom: 0;
+}
+
+#refresh-status {
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+ListView {
+    height: 1fr;
+}
+
+JobListItem {
+    padding: 0 1;
+}
+
+JobListItem.-highlight {
+    background: $accent;
+    color: $text;
+}
+
+#details {
+    width: 1fr;
+}
+
+ConfirmDeleteScreen {
+    align: center middle;
+}
+
+#confirm-copy {
+    width: 56;
+    border: round $accent;
+    padding: 2 3;
+    background: $surface;
+}
+
+#confirm-buttons {
+    width: 56;
+    height: auto;
+    padding: 1 3;
+    background: $surface;
+    align-horizontal: right;
+}
+
+#confirm-buttons Button {
+    margin-left: 1;
+}
+
+LogsScreen {
+    layout: vertical;
+}
+
+#logs-screen {
+    height: 1fr;
+    padding: 1 2;
+}
+
+#logs-title {
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#logs-help {
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#logs-output {
+    height: 1fr;
+    border: round $accent;
+    padding: 1;
+}
