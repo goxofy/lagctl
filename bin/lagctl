@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ -f "$SCRIPT_DIR/../lagctl.py" ]; then
+    LAGCTL_MAIN="$SCRIPT_DIR/../lagctl.py"
+else
+    LAGCTL_MAIN="$SCRIPT_DIR/../libexec/lagctl/lagctl.py"
+fi
+
+export PYTHONDONTWRITEBYTECODE=1
+exec python3 "$LAGCTL_MAIN" "$@"

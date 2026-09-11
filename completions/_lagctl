@@ -1,0 +1,148 @@
+#compdef lagctl
+
+_lagctl_jobs() {
+  local -a jobs
+  jobs=("${(@f)$(command lagctl completion jobs 2>/dev/null)}")
+  if (( ${#jobs} )); then
+    _describe -t jobs 'managed job' jobs
+  else
+    _message 'no managed jobs'
+  fi
+}
+
+_lagctl() {
+  local current previous subcommand separator
+  local -a commands global_options add_options logs_options remove_options
+
+  commands=(
+    'add:create and optionally start a job'
+    'list:list managed jobs'
+    'ls:list managed jobs'
+    'status:show job status'
+    'show:print the generated plist'
+    'start:load a job'
+    'stop:unload a job'
+    'restart:restart a job'
+    'run:trigger a job immediately'
+    'logs:show or follow job logs'
+    'remove:stop and remove a job'
+    'rm:stop and remove a job'
+    'doctor:check the local environment'
+    'completion:print shell completion support'
+  )
+  global_options=(
+    '(-h --help)'{-h,--help}'[show help]'
+    '--version[show version]'
+  )
+
+  if (( CURRENT == 2 )); then
+    if [[ ${words[CURRENT]} == -* ]]; then
+      _describe -t options 'option' global_options
+    else
+      _describe -t commands 'command' commands
+    fi
+    return
+  fi
+
+  current=${words[CURRENT]}
+  previous=${words[CURRENT-1]}
+  subcommand=${words[2]}
+
+  case $subcommand in
+    add)
+      separator=${words[(I)--]}
+      if (( separator > 0 && CURRENT > separator )); then
+        _normal
+        return
+      fi
+      case $previous in
+        --cwd)
+          _directories
+          return
+          ;;
+        --mode)
+          _values 'restart mode' keep-alive on-failure once
+          return
+          ;;
+        --interval|--throttle)
+          _message 'seconds'
+          return
+          ;;
+        --env)
+          _message 'KEY=VALUE'
+          return
+          ;;
+      esac
+      add_options=(
+        '(-h --help)'{-h,--help}'[show help]'
+        '--cwd[set working directory]:directory:_directories'
+        '*--env[set an environment variable]:KEY=VALUE:'
+        '--mode[set restart policy]:mode:(keep-alive on-failure once)'
+        '--interval[run periodically]:seconds:'
+        '--no-run-at-load[do not run when loaded]'
+        '--throttle[set minimum restart delay]:seconds:'
+        '--clean-path[do not inherit PATH]'
+        '--no-start[write plist without loading]'
+        '--force[replace an existing job]'
+        '--allow-background-children[allow daemonized children to survive]'
+        '--[finish lagctl options and begin the managed command]'
+      )
+      if [[ $current == -* ]]; then
+        _describe -t options 'add option' add_options
+      elif (( CURRENT == 3 )); then
+        _message 'new job name'
+      else
+        _message 'use -- before the managed command'
+      fi
+      ;;
+    status|show|start|stop|restart|run)
+      if [[ $current == -* ]]; then
+        _values 'option' -h --help
+      else
+        _lagctl_jobs
+      fi
+      ;;
+    logs)
+      case $previous in
+        -n|--lines)
+          _message 'line count'
+          return
+          ;;
+        --stream)
+          _values 'log stream' all stdout stderr
+          return
+          ;;
+      esac
+      logs_options=(
+        '(-h --help)'{-h,--help}'[show help]'
+        '(-f --follow)'{-f,--follow}'[follow appended output]'
+        '(-n --lines)'{-n,--lines}'[set initial line count]:line count:'
+        '--stream[select log stream]:stream:(all stdout stderr)'
+      )
+      if [[ $current == -* ]]; then
+        _describe -t options 'logs option' logs_options
+      else
+        _lagctl_jobs
+      fi
+      ;;
+    remove|rm)
+      remove_options=(
+        '(-h --help)'{-h,--help}'[show help]'
+        '--purge-logs[also delete stdout and stderr logs]'
+      )
+      if [[ $current == -* ]]; then
+        _describe -t options 'remove option' remove_options
+      else
+        _lagctl_jobs
+      fi
+      ;;
+    completion)
+      _values 'shell' zsh bash
+      ;;
+    list|ls|doctor)
+      _values 'option' -h --help
+      ;;
+  esac
+}
+
+compdef _lagctl lagctl
