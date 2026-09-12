@@ -106,13 +106,22 @@ AddJobScreen {
     align: center middle;
 }
 
-AddJobScreen > * {
-    width: 64;
+#add-form {
+    width: 84;
+    max-width: 96%;
+    height: auto;
+    max-height: 92%;
+    border: round $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#add-form > * {
+    width: 1fr;
     margin: 0;
 }
 
 #add-title {
-    border: round $accent;
     padding: 0 2;
     text-style: bold;
     margin-bottom: 1;
@@ -139,7 +148,7 @@ AddJobScreen Input, AddJobScreen Select {
 }
 
 .add-switch-row {
-    width: 64;
+    width: 1fr;
     height: 3;
     margin: 0;
     align-vertical: middle;

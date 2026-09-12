@@ -7,7 +7,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.events import Resize
 from textual.reactive import reactive
@@ -371,37 +371,38 @@ class AddJobScreen(ModalScreen[Optional[dict[str, Any]]]):
             f"{key}={environment[key]}" for key in explicit_keys
             if key in environment and (key != "PATH" or key in explicit_keys)
         )
-        yield Static("Edit LaunchAgent" if self.editing else "Add LaunchAgent", id="add-title")
-        yield Input(value=self.job.get("name", ""), placeholder="Job name", id="add-name")
-        yield Input(value=str(command[0]) if command else "", placeholder="Command path or executable", id="add-command")
-        yield Input(value=shlex.join(command[1:]) if command else "", placeholder="Arguments, separated by spaces (optional)", id="add-arguments")
-        yield Input(value=str(self.job.get("WorkingDirectory", "")), placeholder="Working directory (optional)", id="add-cwd")
-        yield Select(
-            [("Keep alive", "keep-alive"), ("On failure", "on-failure"), ("Once", "once")],
-            value=mode,
-            id="add-mode",
-        )
-        yield Input(value=str(self.job.get("StartInterval", "")), placeholder="Interval in seconds (optional)", id="add-interval")
-        yield Input(value=str(self.job.get("ThrottleInterval", 10)), placeholder="Throttle seconds", id="add-throttle")
-        yield Label("Environment variables, one KEY=VALUE per line (optional)", id="add-env-help")
-        yield TextArea(env_text, id="add-env")
-        with Horizontal(classes="add-switch-row"):
-            with Horizontal(classes="add-switch-option"):
-                yield Switch(value=self.job.get("RunAtLoad", True), id="add-run-at-load")
-                yield Label("Run at load", id="add-run-label")
-            with Horizontal(classes="add-switch-option"):
-                yield Switch(value=self.job.get("_start_after_edit", not self.editing), id="add-start")
-                yield Label("Start after create", id="add-start-label")
-        with Horizontal(classes="add-switch-row"):
-            with Horizontal(classes="add-switch-option"):
-                yield Switch(value="PATH" not in explicit_keys, id="add-inherit-path")
-                yield Label("Inherit current PATH", id="add-inherit-path-label")
-            with Horizontal(classes="add-switch-option"):
-                yield Switch(value=bool(self.job.get("AbandonProcessGroup", False)), id="add-background")
-                yield Label("Allow background children", id="add-background-label")
-        with Horizontal(id="add-buttons"):
-            yield Button("Save" if self.editing else "Create", variant="primary", id="add-submit")
-            yield Button("Cancel", id="add-cancel")
+        with VerticalScroll(id="add-form"):
+            yield Static("Edit LaunchAgent" if self.editing else "Add LaunchAgent", id="add-title")
+            yield Input(value=self.job.get("name", ""), placeholder="Job name", id="add-name")
+            yield Input(value=str(command[0]) if command else "", placeholder="Command path or executable", id="add-command")
+            yield Input(value=shlex.join(command[1:]) if command else "", placeholder="Arguments, separated by spaces (optional)", id="add-arguments")
+            yield Input(value=str(self.job.get("WorkingDirectory", "")), placeholder="Working directory (optional)", id="add-cwd")
+            yield Select(
+                [("Keep alive", "keep-alive"), ("On failure", "on-failure"), ("Once", "once")],
+                value=mode,
+                id="add-mode",
+            )
+            yield Input(value=str(self.job.get("StartInterval", "")), placeholder="Interval in seconds (optional)", id="add-interval")
+            yield Input(value=str(self.job.get("ThrottleInterval", 10)), placeholder="Throttle seconds", id="add-throttle")
+            yield Label("Environment variables, one KEY=VALUE per line (optional)", id="add-env-help")
+            yield TextArea(env_text, id="add-env")
+            with Horizontal(classes="add-switch-row"):
+                with Horizontal(classes="add-switch-option"):
+                    yield Switch(value=self.job.get("RunAtLoad", True), id="add-run-at-load")
+                    yield Label("Run at load", id="add-run-label")
+                with Horizontal(classes="add-switch-option"):
+                    yield Switch(value=self.job.get("_start_after_edit", not self.editing), id="add-start")
+                    yield Label("Start after create", id="add-start-label")
+            with Horizontal(classes="add-switch-row"):
+                with Horizontal(classes="add-switch-option"):
+                    yield Switch(value="PATH" not in explicit_keys, id="add-inherit-path")
+                    yield Label("Inherit current PATH", id="add-inherit-path-label")
+                with Horizontal(classes="add-switch-option"):
+                    yield Switch(value=bool(self.job.get("AbandonProcessGroup", False)), id="add-background")
+                    yield Label("Allow background children", id="add-background-label")
+            with Horizontal(id="add-buttons"):
+                yield Button("Save" if self.editing else "Create", variant="primary", id="add-submit")
+                yield Button("Cancel", id="add-cancel")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "add-cancel":
