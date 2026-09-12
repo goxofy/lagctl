@@ -1,5 +1,7 @@
 # lagctl
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 `lagctl` is a lightweight macOS LaunchAgent manager with both a script-friendly CLI and an interactive terminal UI. It creates and manages user-level jobs through the system `launchd` service, without `sudo` and without running its own background daemon.
 
 The project is designed for Python, Node.js, shell scripts, local web services, tunnels, workers, scheduled jobs, and other processes that should survive terminal sessions or start automatically after login.
