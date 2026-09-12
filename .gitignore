@@ -1,5 +1,61 @@
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
-.DS_Store
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Packaging and build output
+build/
+dist/
 *.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Coverage and test reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit.xml
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon\r
+._*
+.Spotlight-V100
+.Trashes
+
+# Development-only reference material
+for_dev/
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.temp

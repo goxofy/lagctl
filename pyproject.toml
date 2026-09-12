@@ -6,8 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "lagctl"
 version = "0.3.0"
 description = "A small macOS LaunchAgent manager"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
+keywords = ["macos", "launchd", "launchagent", "tui", "process-manager"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: System :: Systems Administration",
+]
 
 [project.scripts]
 lagctl = "lagctl:main"

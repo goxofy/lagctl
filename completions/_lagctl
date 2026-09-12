@@ -20,6 +20,7 @@ _lagctl() {
     'ls:list managed jobs'
     'status:show job status'
     'show:print the generated plist'
+    'network:show process ports and network usage'
     'start:load a job'
     'stop:unload a job'
     'restart:restart a job'
@@ -96,7 +97,7 @@ _lagctl() {
         _message 'use -- before the managed command'
       fi
       ;;
-    status|show|start|stop|restart|run)
+    status|show|network|start|stop|restart|run)
       if [[ $current == -* ]]; then
         _values 'option' -h --help
       else
@@ -140,7 +141,7 @@ _lagctl() {
     completion)
       _values 'shell' zsh bash
       ;;
-    list|ls|doctor)
+    list|ls|doctor|tui)
       _values 'option' -h --help
       ;;
   esac

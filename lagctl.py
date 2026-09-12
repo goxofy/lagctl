@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import os
 import plistlib
 import re
@@ -35,11 +37,114 @@ class JobStatus:
     last_exit_code: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class NetworkStats:
+    pids: Tuple[int, ...] = ()
+    listening: Tuple[str, ...] = ()
+    bytes_in: Optional[int] = None
+    bytes_out: Optional[int] = None
+    rate_in: Optional[int] = None
+    rate_out: Optional[int] = None
+    error: Optional[str] = None
+
+
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
 def default_runner(args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(list(args), text=True, capture_output=True, **kwargs)
+
+
+def collect_network_stats(root_pids: Mapping[str, int]) -> Dict[str, NetworkStats]:
+    """Collect process-tree ports and network counters for running jobs."""
+    if not root_pids:
+        return {}
+    try:
+        process_result = default_runner(["/bin/ps", "-axo", "pid=,ppid="], timeout=5)
+        process_result.check_returncode()
+        children: Dict[int, List[int]] = {}
+        for line in process_result.stdout.splitlines():
+            values = line.split()
+            if len(values) != 2:
+                continue
+            pid, parent = (int(value) for value in values)
+            children.setdefault(parent, []).append(pid)
+
+        job_pids: Dict[str, set[int]] = {}
+        all_pids: set[int] = set()
+        for name, root_pid in root_pids.items():
+            pending = [root_pid]
+            related: set[int] = set()
+            while pending:
+                pid = pending.pop()
+                if pid in related:
+                    continue
+                related.add(pid)
+                pending.extend(children.get(pid, ()))
+            job_pids[name] = related
+            all_pids.update(related)
+
+        ports_by_pid = _listening_ports_by_pid()
+        totals = _nettop_counters(all_pids, delta=False)
+        rates = _nettop_counters(all_pids, delta=True)
+        stats: Dict[str, NetworkStats] = {}
+        for name, pids in job_pids.items():
+            listening = sorted({port for pid in pids for port in ports_by_pid.get(pid, ())})
+            total_in = sum(totals.get(pid, (0, 0))[0] for pid in pids)
+            total_out = sum(totals.get(pid, (0, 0))[1] for pid in pids)
+            rate_in = sum(rates.get(pid, (0, 0))[0] for pid in pids)
+            rate_out = sum(rates.get(pid, (0, 0))[1] for pid in pids)
+            stats[name] = NetworkStats(
+                pids=tuple(sorted(pids)),
+                listening=tuple(listening),
+                bytes_in=total_in,
+                bytes_out=total_out,
+                rate_in=rate_in,
+                rate_out=rate_out,
+            )
+        return stats
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        return {name: NetworkStats(pids=(pid,), error=str(exc)) for name, pid in root_pids.items()}
+
+
+def _listening_ports_by_pid() -> Dict[int, List[str]]:
+    result = default_runner(
+        ["/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"],
+        timeout=5,
+    )
+    if result.returncode not in (0, 1):
+        result.check_returncode()
+    ports: Dict[int, List[str]] = {}
+    current_pid: Optional[int] = None
+    for line in result.stdout.splitlines():
+        if line.startswith("p"):
+            current_pid = int(line[1:])
+        elif line.startswith("n") and current_pid is not None:
+            ports.setdefault(current_pid, []).append(line[1:])
+    return ports
+
+
+def _nettop_counters(pids: set[int], delta: bool) -> Dict[int, Tuple[int, int]]:
+    if not pids:
+        return {}
+    command = ["/usr/bin/nettop", "-n", "-P", "-L", "2" if delta else "1", "-x"]
+    if delta:
+        command.extend(["-d", "-s", "1"])
+    command.extend(["-J", "bytes_in,bytes_out"])
+    for pid in sorted(pids):
+        command.extend(["-p", str(pid)])
+    result = default_runner(command, timeout=8)
+    result.check_returncode()
+    counters: Dict[int, Tuple[int, int]] = {}
+    for row in csv.reader(io.StringIO(result.stdout)):
+        if len(row) < 3 or not row[0] or row[0] == "interface":
+            continue
+        try:
+            pid = int(row[0].rsplit(".", 1)[1])
+            counters[pid] = (int(row[1] or 0), int(row[2] or 0))
+        except (IndexError, ValueError):
+            continue
+    return counters
 
 
 def expand_path(value: str, base: Optional[Path] = None) -> Path:
@@ -125,6 +230,7 @@ class AgentManager:
         log_dir: Optional[Path] = None,
         runner: Runner = default_runner,
         uid: Optional[int] = None,
+        network_collector: Callable[[Mapping[str, int]], Dict[str, NetworkStats]] = collect_network_stats,
     ) -> None:
         home = Path.home()
         configured_agent_dir = os.environ.get("LAGCTL_AGENT_DIR")
@@ -137,6 +243,7 @@ class AgentManager:
         )
         self.runner = runner
         self.uid = os.getuid() if uid is None else uid
+        self.network_collector = network_collector
 
     @property
     def domain(self) -> str:
@@ -217,6 +324,7 @@ class AgentManager:
         run_at_load: bool,
         throttle_interval: int,
         allow_background_children: bool,
+        explicit_environment_keys: Sequence[str] = (),
     ) -> Dict[str, Any]:
         label = self.label(name)
         stdout_path = self.log_dir / f"{name}.stdout.log"
@@ -241,6 +349,8 @@ class AgentManager:
 
         if environment:
             data["EnvironmentVariables"] = dict(environment)
+            if explicit_environment_keys:
+                data["LagctlExplicitEnvironmentKeys"] = sorted(explicit_environment_keys)
         if allow_background_children:
             data["AbandonProcessGroup"] = True
         return data
@@ -283,6 +393,7 @@ class AgentManager:
             raise LagctlError(f"Working directory does not exist: {working_directory}")
 
         environment = parse_env(env_items)
+        explicit_environment_keys = list(environment)
         if inherit_path and "PATH" not in environment:
             environment["PATH"] = os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 
@@ -296,6 +407,7 @@ class AgentManager:
             run_at_load=run_at_load,
             throttle_interval=throttle_interval,
             allow_background_children=allow_background_children,
+            explicit_environment_keys=explicit_environment_keys,
         )
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -489,6 +601,38 @@ def follow_logs(manager: AgentManager, name: str, stream: str, lines: int, follo
     return subprocess.call(command)
 
 
+def format_byte_count(value: Optional[int], per_second: bool = False) -> str:
+    if value is None:
+        return "-"
+    amount = float(value)
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    unit = units[0]
+    for unit in units:
+        if abs(amount) < 1024 or unit == units[-1]:
+            break
+        amount /= 1024
+    rendered = f"{amount:.1f}" if amount < 10 and unit != "B" else f"{amount:.0f}"
+    return f"{rendered} {unit}{'/s' if per_second else ''}"
+
+
+def print_network(manager: AgentManager, name: str) -> None:
+    manager.read_plist(name)
+    status = manager.status(name)
+    stats = (
+        manager.network_collector({name: status.pid}).get(name, NetworkStats())
+        if status.pid is not None
+        else NetworkStats()
+    )
+    print(f"Name:          {name}")
+    print(f"Process PIDs:  {', '.join(str(pid) for pid in stats.pids) or '-'}")
+    print(f"Listening:     {', '.join(stats.listening) or '-'}")
+    print(f"RX total:      {format_byte_count(stats.bytes_in)}")
+    print(f"TX total:      {format_byte_count(stats.bytes_out)}")
+    print(f"RX rate:       {format_byte_count(stats.rate_in, per_second=True)}")
+    print(f"TX rate:       {format_byte_count(stats.rate_out, per_second=True)}")
+    print(f"Network error: {stats.error or '-'}")
+
+
 def run_doctor(manager: AgentManager) -> int:
     checks: List[Tuple[str, bool, str]] = []
     mac_version = platform.mac_ver()[0]
@@ -501,6 +645,8 @@ def run_doctor(manager: AgentManager) -> int:
     checks.append(("Python", sys.version_info >= (3, 9), platform.python_version()))
     checks.append(("launchctl", os.access("/bin/launchctl", os.X_OK), "/bin/launchctl"))
     checks.append(("tail", os.access("/usr/bin/tail", os.X_OK), "/usr/bin/tail"))
+    checks.append(("lsof", os.access("/usr/sbin/lsof", os.X_OK), "/usr/sbin/lsof"))
+    checks.append(("nettop", os.access("/usr/bin/nettop", os.X_OK), "/usr/bin/nettop"))
     checks.append(("agent directory", manager.agent_dir.parent.is_dir() and os.access(manager.agent_dir.parent, os.W_OK), str(manager.agent_dir)))
     checks.append(("log directory", manager.log_dir.parent.is_dir() and os.access(manager.log_dir.parent, os.W_OK), str(manager.log_dir)))
     domain_result = manager._launchctl("print", manager.domain)
@@ -556,7 +702,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("list", aliases=["ls"], help="list managed jobs")
-    for command_name in ("status", "show", "start", "stop", "restart", "run"):
+    for command_name in ("status", "show", "network", "start", "stop", "restart", "run"):
         command_parser = subparsers.add_parser(command_name)
         command_parser.add_argument("name")
 
@@ -625,6 +771,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print_status(manager, args.name)
         elif args.subcommand == "show":
             show_plist(manager, args.name)
+        elif args.subcommand == "network":
+            print_network(manager, args.name)
         elif args.subcommand == "start":
             manager.start(args.name)
             print(f"Started {args.name}")

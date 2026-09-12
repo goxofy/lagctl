@@ -4,7 +4,7 @@ _lagctl_completion() {
     previous="${COMP_WORDS[COMP_CWORD-1]}"
     subcommand="${COMP_WORDS[1]}"
 
-    local commands="add list ls status show start stop restart run logs remove rm doctor tui completion"
+    local commands="add list ls status show network start stop restart run logs remove rm doctor tui completion"
     if (( COMP_CWORD == 1 )); then
         COMPREPLY=( $(compgen -W "$commands --help --version" -- "$current") )
         return
@@ -34,7 +34,7 @@ _lagctl_completion() {
                 COMPREPLY=( $(compgen -W "--help --cwd --env --mode --interval --no-run-at-load --throttle --clean-path --no-start --force --allow-background-children --" -- "$current") )
             fi
             ;;
-        status|show|start|stop|restart|run)
+        status|show|network|start|stop|restart|run)
             COMPREPLY=( $(compgen -W "$(command lagctl completion jobs 2>/dev/null)" -- "$current") )
             ;;
         logs)

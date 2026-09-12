@@ -4,8 +4,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,7 @@ class AgentManagerTests(unittest.TestCase):
             log_dir=self.log_dir,
             runner=self.runner,
             uid=501,
+            network_collector=lambda root_pids: {},
         )
 
     def tearDown(self):
@@ -187,6 +189,43 @@ class AgentManagerTests(unittest.TestCase):
         self.assertEqual(status.pid, 4242)
         self.assertEqual(status.last_exit_code, 7)
 
+    def test_print_network_uses_job_pid_and_formats_stats(self):
+        self.manager.add("worker", ["/bin/echo"], start=False)
+        target = "gui/501/" + lagctl.LABEL_PREFIX + "worker"
+        self.runner.outputs[target] = "state = running\npid = 4242\n"
+        self.manager.network_collector = lambda roots: {
+            "worker": lagctl.NetworkStats(
+                pids=(4242, 4243),
+                listening=("*:3000",),
+                bytes_in=2048,
+                bytes_out=4096,
+                rate_in=128,
+                rate_out=256,
+            )
+        }
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            lagctl.print_network(self.manager, "worker")
+
+        rendered = output.getvalue()
+        self.assertIn("Process PIDs:  4242, 4243", rendered)
+        self.assertIn("Listening:     *:3000", rendered)
+        self.assertIn("RX total:      2.0 KiB", rendered)
+        self.assertIn("TX rate:       256 B/s", rendered)
+
+    def test_print_network_for_stopped_job_does_not_collect(self):
+        self.manager.add("worker", ["/bin/echo"], start=False)
+        calls = []
+        self.manager.network_collector = lambda roots: calls.append(roots) or {}
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            lagctl.print_network(self.manager, "worker")
+
+        self.assertEqual(calls, [])
+        self.assertIn("Process PIDs:  -", output.getvalue())
+
     def test_remove_keeps_logs_by_default_and_can_purge(self):
         self.manager.add("worker", ["/bin/echo", "ok"], start=False)
         stdout = self.log_dir / "worker.stdout.log"
@@ -223,6 +262,31 @@ class AgentManagerTests(unittest.TestCase):
 
 
 class UtilityTests(unittest.TestCase):
+    def test_collect_network_stats_aggregates_process_tree_ports_and_counters(self):
+        ps = subprocess.CompletedProcess([], 0, "100 1\n101 100\n102 101\n200 1\n", "")
+        lsof = subprocess.CompletedProcess([], 0, "p100\nn*:3000\np102\nn127.0.0.1:8080\n", "")
+        totals = subprocess.CompletedProcess(
+            [], 0, ",bytes_in,bytes_out,\nroot.100,1000,2000,\nchild.101,300,400,\nchild.102,50,60,\n", ""
+        )
+        rates = subprocess.CompletedProcess(
+            [], 0, ",bytes_in,bytes_out,\nroot.100,100,200,\nchild.101,30,40,\nchild.102,5,6,\n", ""
+        )
+        with patch.object(lagctl, "default_runner", side_effect=[ps, lsof, totals, rates]):
+            stats = lagctl.collect_network_stats({"worker": 100})["worker"]
+
+        self.assertEqual(stats.pids, (100, 101, 102))
+        self.assertEqual(stats.listening, ("*:3000", "127.0.0.1:8080"))
+        self.assertEqual(stats.bytes_in, 1350)
+        self.assertEqual(stats.bytes_out, 2460)
+        self.assertEqual(stats.rate_in, 135)
+        self.assertEqual(stats.rate_out, 246)
+
+    def test_collect_network_stats_degrades_to_error(self):
+        with patch.object(lagctl, "default_runner", side_effect=OSError("unavailable")):
+            stats = lagctl.collect_network_stats({"worker": 100})["worker"]
+        self.assertEqual(stats.pids, (100,))
+        self.assertIn("unavailable", stats.error or "")
+
     def test_completion_scripts_are_available(self):
         zsh_script = lagctl.completion_script("zsh")
         bash_script = lagctl.completion_script("bash")
@@ -254,6 +318,11 @@ class UtilityTests(unittest.TestCase):
     def test_parser_supports_tui_subcommand_without_optional_import(self):
         args = lagctl.parse_arguments(["tui"])
         self.assertEqual(args.subcommand, "tui")
+
+    def test_parser_supports_network_subcommand(self):
+        args = lagctl.parse_arguments(["network", "worker"])
+        self.assertEqual(args.subcommand, "network")
+        self.assertEqual(args.name, "worker")
 
     def test_add_options_can_follow_name(self):
         args = lagctl.parse_arguments(
